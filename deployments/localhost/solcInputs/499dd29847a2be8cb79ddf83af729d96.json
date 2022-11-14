@@ -1,0 +1,35 @@
+{
+  "language": "Solidity",
+  "sources": {
+    "contracts/DAO.sol": {
+      "content": "// SPDX-License-Identifier: MIT\npragma solidity ^0.8.8;\n\ncontract DAO {\n    struct Proposal {\n        uint256 id;\n        string name;\n        uint256 amount;\n        address payable recipient;\n        uint256 votes;\n        uint256 end;\n        bool executed;\n    }\n    mapping(uint256 => Proposal) public proposals;\n    mapping(address => bool) public investors;\n    mapping(address => uint256) public shares;\n    mapping(address => mapping(uint256 => bool)) public votes;\n    uint256 public nextProposalId;\n    uint256 public voteTime;\n    uint256 public quorum;\n    address public admin;\n    uint256 public totalShares;\n    uint256 public availableFunds;\n    uint256 public contributionEnd;\n\n    constructor(\n        uint256 contributionTime,\n        uint256 _voteTime,\n        uint256 _quorum\n    ) {\n        contributionEnd = block.timestamp + contributionTime;\n        voteTime = _voteTime;\n        quorum = _quorum;\n        admin = msg.sender;\n    }\n\n    function contribute() external payable {\n        require(\n            block.timestamp < contributionEnd,\n            \"cannot contribute after contibutionEnd\"\n        );\n        investors[msg.sender] = true;\n        shares[msg.sender] += msg.value;\n        totalShares += msg.value;\n        availableFunds += msg.value;\n    }\n\n    function redeemShare(uint256 amount) external {\n        require(shares[msg.sender] >= amount, \"not enough shares\");\n        require(availableFunds >= amount, \"not enough availableFund\");\n        shares[msg.sender] -= amount;\n        availableFunds -= amount;\n        msg.sender.call{value: amount};\n    }\n\n    function transferShare(uint256 amount, address to) external {\n        require(shares[msg.sender] >= amount, \"not enough shares\");\n        shares[msg.sender] -= amount;\n        shares[to] += amount;\n        investors[to] = true;\n    }\n\n    function createProposal(\n        string memory name,\n        uint256 amount,\n        address payable recepient\n    ) external {\n        require(availableFunds >= amount, \"amount too big\");\n        proposals[nextProposalId] = Proposal(\n            nextProposalId,\n            name,\n            amount,\n            recepient,\n            0,\n            block.timestamp + voteTime,\n            false\n        );\n        availableFunds -= amount;\n        nextProposalId++;\n    }\n\n    function vote(uint256 proposalId) external {\n        Proposal storage proposal = proposals[proposalId];\n        require(\n            votes[msg.sender][proposalId] == false,\n            \"voters can only vote once for a proposal\"\n        );\n        require(\n            block.timestamp < proposal.end,\n            \"can only vote until proposal end\"\n        );\n        votes[msg.sender][proposalId] = true;\n        proposal.votes += shares[msg.sender];\n    }\n\n    function executeProposal(uint256 proposalId) external onlyAdmin {\n        Proposal storage proposal = proposals[proposalId];\n        require(\n            block.timestamp >= proposal.end,\n            \"can not execute a proposal before end date\"\n        );\n        require(\n            proposal.executed == false,\n            \"can not executed a proposal that is alreday executed\"\n        );\n        require(\n            (proposal.votes / totalShares) * 100 >= quorum,\n            \"cannot executed a proposal with below quorum\"\n        );\n        _transferEther(proposal.amount, proposal.recipient);\n    }\n\n    function withdrawEther(uint256 amount, address payable to)\n        external\n        onlyAdmin\n    {\n        _transferEther(amount, to);\n    }\n\n    receive() external payable {\n        availableFunds += msg.value;\n    }\n\n    function _transferEther(uint256 amount, address payable to) internal {\n        require(amount <= availableFunds, \"not enough availableFund\");\n        availableFunds -= amount;\n        to.transfer(amount);\n    }\n\n    modifier onlyInvestors() {\n        require(investors[msg.sender] == true, \"only investors\");\n        _;\n    }\n    modifier onlyAdmin() {\n        require(msg.sender == admin, \"only admin\");\n        _;\n    }\n}\n"
+    }
+  },
+  "settings": {
+    "optimizer": {
+      "enabled": false,
+      "runs": 200
+    },
+    "outputSelection": {
+      "*": {
+        "*": [
+          "abi",
+          "evm.bytecode",
+          "evm.deployedBytecode",
+          "evm.methodIdentifiers",
+          "metadata",
+          "devdoc",
+          "userdoc",
+          "storageLayout",
+          "evm.gasEstimates"
+        ],
+        "": [
+          "ast"
+        ]
+      }
+    },
+    "metadata": {
+      "useLiteralContent": true
+    }
+  }
+}
